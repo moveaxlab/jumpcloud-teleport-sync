@@ -21,8 +21,7 @@ then follows the configured cron schedule internally.
 ## Prerequisites
 
 - Teleport Community Edition running in Kubernetes
-- JumpCloud service account (client ID + secret) with read access to users and groups
-- Docker registry for the sync image
+- JumpCloud service account (client ID + secret) with read access to users and groups: https://console.jumpcloud.com/#/settings/service-accounts
 
 ## Quick Start
 

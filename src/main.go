@@ -8,7 +8,9 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/smtp"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -56,6 +58,13 @@ type Config struct {
 	TeleportIdentity      string
 	TeleportRoles         []string
 	DryRun                bool
+
+	SMTPEnabled bool
+	SMTPHost    string
+	SMTPPort    int
+	SMTPUser    string
+	SMTPPass    string
+	SMTPFrom    string
 }
 
 func loadConfig() (*Config, error) {
@@ -89,6 +98,14 @@ func loadConfig() (*Config, error) {
 	}
 	dryRun := os.Getenv("DRY_RUN") == "true"
 
+	smtpEnabled := os.Getenv("SMTP_ENABLED") == "true"
+	smtpPort := 587
+	if p := os.Getenv("SMTP_PORT"); p != "" {
+		if v, err := strconv.Atoi(p); err == nil {
+			smtpPort = v
+		}
+	}
+
 	return &Config{
 		JumpCloudClientID:     clientID,
 		JumpCloudClientSecret: clientSecret,
@@ -98,6 +115,12 @@ func loadConfig() (*Config, error) {
 		TeleportIdentity:      identity,
 		TeleportRoles:         strings.Split(roles, ","),
 		DryRun:                dryRun,
+		SMTPEnabled:           smtpEnabled,
+		SMTPHost:              os.Getenv("SMTP_HOST"),
+		SMTPPort:              smtpPort,
+		SMTPUser:              os.Getenv("SMTP_USERNAME"),
+		SMTPPass:              os.Getenv("SMTP_PASSWORD"),
+		SMTPFrom:              os.Getenv("SMTP_FROM"),
 	}, nil
 }
 
@@ -256,6 +279,62 @@ func (jc *JumpCloudClient) GetUser(ctx context.Context, userID string) (*JCUser,
 		return nil, fmt.Errorf("parsing user: %w", err)
 	}
 	return &user, nil
+}
+
+// --- Email ---
+
+func sendInviteEmail(cfg *Config, toEmail, username, inviteURL string) error {
+	addr := fmt.Sprintf("%s:%d", cfg.SMTPHost, cfg.SMTPPort)
+
+	subject := "You've been invited to Teleport"
+	body := fmt.Sprintf(
+		"Hello %s,\r\n\r\n"+
+			"An account has been created for you on Teleport.\r\n"+
+			"Please use the following link to set up your credentials:\r\n\r\n"+
+			"%s\r\n\r\n"+
+			"This link will expire, so please complete the setup as soon as possible.\r\n",
+		username, inviteURL,
+	)
+
+	msg := fmt.Sprintf(
+		"From: %s\r\nTo: %s\r\nSubject: %s\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=\"UTF-8\"\r\n\r\n%s",
+		cfg.SMTPFrom, toEmail, subject, body,
+	)
+
+	conn, err := smtp.Dial(addr)
+	if err != nil {
+		return fmt.Errorf("connecting to SMTP server: %w", err)
+	}
+	defer conn.Close()
+
+	if err := conn.StartTLS(&tls.Config{ServerName: cfg.SMTPHost}); err != nil {
+		return fmt.Errorf("STARTTLS: %w", err)
+	}
+
+	auth := smtp.PlainAuth("", cfg.SMTPUser, cfg.SMTPPass, cfg.SMTPHost)
+	if err := conn.Auth(auth); err != nil {
+		return fmt.Errorf("SMTP auth: %w", err)
+	}
+
+	if err := conn.Mail(cfg.SMTPFrom); err != nil {
+		return fmt.Errorf("SMTP MAIL FROM: %w", err)
+	}
+	if err := conn.Rcpt(toEmail); err != nil {
+		return fmt.Errorf("SMTP RCPT TO: %w", err)
+	}
+
+	w, err := conn.Data()
+	if err != nil {
+		return fmt.Errorf("SMTP DATA: %w", err)
+	}
+	if _, err := w.Write([]byte(msg)); err != nil {
+		return fmt.Errorf("writing email body: %w", err)
+	}
+	if err := w.Close(); err != nil {
+		return fmt.Errorf("closing email body: %w", err)
+	}
+
+	return conn.Quit()
 }
 
 // --- Sync logic ---
@@ -428,11 +507,21 @@ func run(ctx context.Context) error {
 					logger.Warn("user created but failed to generate invite token",
 						"username", username, "error", err)
 				} else {
+					inviteURL := fmt.Sprintf("https://%s/web/invite/%s",
+						strings.Split(cfg.TeleportAddr, ":")[0], token.GetName())
 					logger.Info("created user with invite",
 						"username", username,
-						"invite_url", fmt.Sprintf("https://%s/web/invite/%s",
-							strings.Split(cfg.TeleportAddr, ":")[0], token.GetName()),
+						"invite_url", inviteURL,
 					)
+
+					if cfg.SMTPEnabled {
+						if err := sendInviteEmail(cfg, jcUser.Email, username, inviteURL); err != nil {
+							logger.Error("failed to send invite email",
+								"username", username, "email", jcUser.Email, "error", err)
+						} else {
+							logger.Info("invite email sent", "username", username, "email", jcUser.Email)
+						}
+					}
 				}
 			}
 			created++

@@ -37,6 +37,24 @@ schedule: "*/15 * * * *"
 # -- Enable dry run mode (logs changes without applying)
 dryRun: false
 
+# -- SMTP settings for sending invite emails (designed for AWS SES)
+smtp:
+  # -- Enable sending invite emails on user creation
+  enabled: false
+  # -- SMTP server hostname (e.g. email-smtp.eu-west-1.amazonaws.com)
+  host: ""
+  # -- SMTP server port (587 for STARTTLS)
+  port: 587
+  # -- SMTP username (AWS SES SMTP credential)
+  username: ""
+  # -- SMTP password (AWS SES SMTP credential)
+  password: ""
+  # -- Sender email address (must be verified in SES)
+  from: ""
+  # -- Use an existing secret for SMTP credentials instead of creating one
+  # The secret must have keys: SMTP_USERNAME, SMTP_PASSWORD
+  existingSecret: ""
+
 # -- Job settings
 job:
   backoffLimit: 2

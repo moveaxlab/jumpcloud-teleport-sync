@@ -27,7 +27,7 @@ spec:
           {{- end }}
         spec:
           serviceAccountName: {{ include "jumpcloud-teleport-sync.serviceAccountName" . }}
-          restartPolicy: OnFailure
+          restartPolicy: Never
           {{- with .Values.imagePullSecrets }}
           imagePullSecrets:
             {{- toYaml . | nindent 12 }}
@@ -47,7 +47,6 @@ spec:
                   mountPath: /etc/tbot
                 - name: identity
                   mountPath: /var/run/teleport
-
           containers:
             - name: sync
               image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"

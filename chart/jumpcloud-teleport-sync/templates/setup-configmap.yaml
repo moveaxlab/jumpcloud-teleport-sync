@@ -69,7 +69,7 @@ data:
       join_method: kubernetes
       bot_name: ${BOT_NAME}
       kubernetes:
-        type: static
+        type: in_cluster
         allow:
           - service_account: "${NAMESPACE}:${SA_NAME}"
     TOKEN_EOF

@@ -94,11 +94,11 @@ Then run `./setup-teleport-bot.sh` manually with `tctl` access.
 | `teleportDefaultRoles` | Roles for synced users | `access` |
 | `schedule` | Cron schedule | `*/15 * * * *` |
 | `dryRun` | Log-only mode | `false` |
-| `teleportImage.tag` | Teleport version for tbot | `16` |
+| `teleportImage.tag` | Teleport version for tbot | `18` |
 | `setup.enabled` | Run automatic bot setup hook | `true` |
 | `setup.teleportAuthSelector` | Label selector for auth pod | `app=teleport` |
 | `setup.teleportAuthContainer` | Container name with tctl | `teleport` |
-| `setup.kubectlImage.tag` | kubectl image version | `1.30` |
+| `setup.kubectlImage.tag` | kubectl image version | `1.35` |
 
 ## Behavior
 

@@ -121,7 +121,7 @@ func NewJumpCloudClient(clientID, clientSecret, orgID string) *JumpCloudClient {
 		orgID:        orgID,
 		httpClient:   &http.Client{Timeout: 30 * time.Second},
 		baseURL:      "https://console.jumpcloud.com/api",
-		authURL:      "https://auth.jumpcloud.com/oauth2/token",
+		authURL:      "https://admin-oauth.id.jumpcloud.com/oauth2/token",
 	}
 }
 

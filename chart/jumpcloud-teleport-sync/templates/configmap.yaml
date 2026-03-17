@@ -15,8 +15,8 @@ data:
       token: {{ include "jumpcloud-teleport-sync.fullname" . }}-bot
     storage:
       type: memory
-    outputs:
-      - type: identity_file
+    services:
+      - type: identity
         destination:
           type: directory
           path: /var/run/teleport

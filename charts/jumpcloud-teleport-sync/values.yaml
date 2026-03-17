@@ -106,3 +106,4 @@ setup:
   kubectlImage:
     repository: alpine/kubectl
     tag: 1.35.2
+

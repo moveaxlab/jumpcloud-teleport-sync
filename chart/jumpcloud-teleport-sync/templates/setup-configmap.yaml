@@ -22,7 +22,7 @@ data:
     AUTH_CONTAINER="{{ .Values.setup.teleportAuthContainer }}"
 
     BOT_NAME="${FULLNAME}-bot"
-    ROLE_NAME="${FULLNAME}-bot-role"
+    BOT_ROLE_NAME="bot-${BOT_NAME}"
 
     echo "==> Finding Teleport auth pod..."
     AUTH_POD=$(kubectl get pods -n "${NAMESPACE}" -l "${AUTH_SELECTOR}"       --field-selector=status.phase=Running -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)
@@ -37,27 +37,7 @@ data:
       kubectl exec -n "${NAMESPACE}" "${AUTH_POD}" -c "${AUTH_CONTAINER}" -- tctl "$@"
     }
 
-    # --- 1. Create or update the bot role (idempotent via create -f) ---
-    echo "==> Creating/updating role: ${ROLE_NAME}"
-    cat <<ROLE_EOF | kubectl exec -i -n "${NAMESPACE}" "${AUTH_POD}" -c "${AUTH_CONTAINER}" -- tctl create -f
-    kind: role
-    version: v7
-    metadata:
-      name: ${ROLE_NAME}
-    spec:
-      allow:
-        rules:
-          - resources: [user]
-            verbs: [list, read, create, update, delete]
-          - resources: [token]
-            verbs: [list, read, create]
-          - resources: [lock]
-            verbs: [list, read, create, update]
-          - resources: [reset_password_token]
-            verbs: [create]
-    ROLE_EOF
-
-    # --- 2. Create or update the join token (idempotent via create -f) ---
+    # --- 1. Create or update the join token (idempotent via create -f) ---
     echo "==> Creating/updating join token: ${BOT_NAME}"
     cat <<TOKEN_EOF | kubectl exec -i -n "${NAMESPACE}" "${AUTH_POD}" -c "${AUTH_CONTAINER}" -- tctl create -f
     kind: token
@@ -74,14 +54,41 @@ data:
           - service_account: "${NAMESPACE}:${SA_NAME}"
     TOKEN_EOF
 
-    # --- 3. Create bot if it doesn't exist (tctl bots add is NOT idempotent) ---
+    # --- 2. Create bot if it doesn't exist (tctl bots add is NOT idempotent) ---
     echo "==> Checking if bot exists: ${BOT_NAME}"
     if tctl_exec bots ls 2>/dev/null | grep -q "${BOT_NAME}"; then
       echo "    Bot already exists, skipping creation"
     else
       echo "    Creating bot: ${BOT_NAME}"
-      tctl_exec bots add "${BOT_NAME}"         --roles="${ROLE_NAME}"         --token="${BOT_NAME}"         --logins=""
+      tctl_exec bots add "${BOT_NAME}"         --token="${BOT_NAME}"         --logins=""
     fi
+
+    # --- 3. Update the auto-created bot role with required permissions ---
+    echo "==> Updating bot role: ${BOT_ROLE_NAME}"
+    cat <<ROLE_EOF | kubectl exec -i -n "${NAMESPACE}" "${AUTH_POD}" -c "${AUTH_CONTAINER}" -- tctl create -f
+    kind: role
+    version: v7
+    metadata:
+      name: ${BOT_ROLE_NAME}
+      labels:
+        teleport.internal/bot: ${BOT_NAME}
+    spec:
+      allow:
+        impersonate:
+          roles:
+          - ${BOT_ROLE_NAME}
+        rules:
+          - resources: [cert_authority]
+            verbs: [readnosecrets]
+          - resources: [user]
+            verbs: [list, read, create, update, delete]
+          - resources: [token]
+            verbs: [list, read, create]
+          - resources: [lock]
+            verbs: [list, read, create, update]
+          - resources: [reset_password_token]
+            verbs: [create]
+    ROLE_EOF
 
     echo "==> Setup complete!"
 {{- end }}

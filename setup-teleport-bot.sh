@@ -18,27 +18,8 @@ set -euo pipefail
 RELEASE_NAME="${RELEASE_NAME:-jumpcloud-teleport-sync}"
 NAMESPACE="${NAMESPACE:-teleport}"
 BOT_NAME="${RELEASE_NAME}-bot"
-ROLE_NAME="${RELEASE_NAME}-bot-role"
+BOT_ROLE_NAME="bot-${BOT_NAME}"
 SA_NAME="${RELEASE_NAME}"
-
-echo "==> Creating bot role: ${ROLE_NAME}"
-cat <<EOF | tctl create -f
-kind: role
-version: v7
-metadata:
-  name: ${ROLE_NAME}
-spec:
-  allow:
-    rules:
-      - resources: [user]
-        verbs: [list, read, create, update, delete]
-      - resources: [token]
-        verbs: [list, read, create]
-      - resources: [lock]
-        verbs: [list, read, create, update]
-      - resources: [reset_password_token]
-        verbs: [create]
-EOF
 
 echo "==> Creating bot join token: ${BOT_NAME}"
 cat <<EOF | tctl create -f
@@ -58,6 +39,31 @@ EOF
 
 echo "==> Creating Machine ID bot: ${BOT_NAME}"
 tctl bots add "${BOT_NAME}" \
-  --roles="${ROLE_NAME}" \
   --token="${BOT_NAME}" \
   --logins=""
+
+echo "==> Updating bot role with required permissions: ${BOT_ROLE_NAME}"
+cat <<EOF | tctl create -f
+kind: role
+version: v7
+metadata:
+  name: ${BOT_ROLE_NAME}
+  labels:
+    teleport.internal/bot: ${BOT_NAME}
+spec:
+  allow:
+    impersonate:
+      roles:
+      - ${BOT_ROLE_NAME}
+    rules:
+      - resources: [cert_authority]
+        verbs: [readnosecrets]
+      - resources: [user]
+        verbs: [list, read, create, update, delete]
+      - resources: [token]
+        verbs: [list, read, create]
+      - resources: [lock]
+        verbs: [list, read, create, update]
+      - resources: [reset_password_token]
+        verbs: [create]
+EOF

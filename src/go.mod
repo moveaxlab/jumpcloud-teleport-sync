@@ -2,7 +2,10 @@ module github.com/moveaxlab/jumpcloud-teleport-sync
 
 go 1.25.8
 
-require github.com/gravitational/teleport/api v0.0.0
+require (
+	github.com/gravitational/teleport/api v0.0.0
+	github.com/robfig/cron/v3 v3.0.1
+)
 
 require (
 	github.com/beevik/etree v1.5.0 // indirect

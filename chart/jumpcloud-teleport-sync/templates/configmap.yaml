@@ -9,12 +9,13 @@ data:
   tbot.yaml: |
     version: v2
     auth_server: {{ .Values.teleportAddr }}
-    oneshot: true
+    oneshot: false
     onboarding:
       join_method: kubernetes
       token: {{ include "jumpcloud-teleport-sync.fullname" . }}-bot
     storage:
-      type: memory
+      type: directory
+      path: /tmp/tbot-storage
     services:
       - type: identity
         destination:

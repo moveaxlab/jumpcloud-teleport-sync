@@ -1,18 +1,16 @@
-# -- JumpCloud group name to sync from
-jumpcloudGroupName: ""
-
-# -- JumpCloud service account client ID
-jumpcloudClientID: ""
-
-# -- JumpCloud service account client secret (will be stored in a Secret)
-jumpcloudClientSecret: ""
-
-# -- JumpCloud organization ID
-jumpcloudOrgID: ""
-
-# -- Use an existing secret for JumpCloud credentials instead of creating one
-# The secret must have keys: JUMPCLOUD_CLIENT_ID, JUMPCLOUD_CLIENT_SECRET, JUMPCLOUD_ORG_ID
-existingSecret: ""
+# -- JumpCloud settings
+jumpcloud:
+  # -- JumpCloud group name to sync from
+  groupName: ""
+  # -- JumpCloud service account client ID
+  clientID: ""
+  # -- JumpCloud service account client secret (will be stored in a Secret)
+  clientSecret: ""
+  # -- JumpCloud organization ID
+  orgID: ""
+  # -- Use an existing secret for JumpCloud credentials instead of creating one
+  # The secret must have keys: JUMPCLOUD_CLIENT_ID, JUMPCLOUD_CLIENT_SECRET, JUMPCLOUD_ORG_ID
+  existingSecret: ""
 
 # -- Teleport auth server address (in-cluster)
 teleportAddr: "teleport-auth.teleport.svc.cluster.local:3025"
@@ -20,7 +18,7 @@ teleportAddr: "teleport-auth.teleport.svc.cluster.local:3025"
 # -- Comma-separated list of Teleport roles to assign to synced users
 teleportDefaultRoles: "access"
 
-# -- Teleport image for the tbot init container
+# -- Teleport image for the tbot sidecar container
 teleportImage:
   repository: public.ecr.aws/gravitational/teleport-distroless
   tag: "18"
@@ -31,7 +29,7 @@ image:
   tag: latest
   pullPolicy: IfNotPresent
 
-# -- CronJob schedule (default: every 15 min)
+# -- Sync schedule (cron expression, used by the internal scheduler)
 schedule: "*/15 * * * *"
 
 # -- Enable dry run mode (logs changes without applying)
@@ -55,12 +53,14 @@ smtp:
   # The secret must have keys: SMTP_USERNAME, SMTP_PASSWORD
   existingSecret: ""
 
-# -- Job settings
-job:
-  backoffLimit: 2
-  activeDeadlineSeconds: 300
-  successfulJobsHistoryLimit: 3
-  failedJobsHistoryLimit: 5
+# -- Pod resources for the tbot sidecar container
+tbotResources:
+  requests:
+    cpu: 25m
+    memory: 32Mi
+  limits:
+    cpu: 100m
+    memory: 64Mi
 
 # -- Pod resources for the sync container
 resources:

@@ -1,18 +1,22 @@
 # JumpCloud → Teleport SCIM Sync
 
 Syncs users from a JumpCloud group into Teleport Community Edition as local users.
-Designed to run as a Kubernetes CronJob in the same cluster/namespace as Teleport.
+Designed to run as a Kubernetes Deployment with a tbot sidecar in the same cluster/namespace as Teleport.
 
 ## Architecture
 
 ```
-┌────────────┐    API     ┌──────────────┐   tbot init   ┌─────────────┐
-│ JumpCloud  │◄───────────│  CronJob Pod │──────────────►│  Teleport   │
-│  (group)   │            │              │   identity    │  Auth Svc   │
-└────────────┘            │ init: tbot   │──────────────►│             │
-                          │ main: sync   │   Go client   └─────────────┘
-                          └──────────────┘
+┌────────────┐    API     ┌───────────────┐  tbot daemon  ┌─────────────┐
+│ JumpCloud  │◄───────────│  Deployment   │──────────────►│  Teleport   │
+│  (group)   │            │               │   identity    │  Auth Svc   │
+└────────────┘            │ sidecar: tbot │──────────────►│             │
+                          │ main: sync    │   Go client   └─────────────┘
+                          └───────────────┘
 ```
+
+The tbot sidecar runs continuously, renewing certificates automatically.
+The sync container waits for the identity file, runs an initial sync at startup,
+then follows the configured cron schedule internally.
 
 ## Prerequisites
 
@@ -31,10 +35,10 @@ via a post-install hook. No manual `tctl` step needed.
 helm repo add jumpcloud-teleport-sync https://moveaxlab.github.io/jumpcloud-teleport-sync/
 
 helm install jumpcloud-teleport-sync jumpcloud-teleport-sync/jumpcloud-teleport-sync -n teleport \
-  --set jumpcloudGroupName="My Teleport Users" \
-  --set jumpcloudClientID="your-client-id" \
-  --set jumpcloudClientSecret="your-client-secret" \
-  --set jumpcloudOrgID="your-org-id" \
+  --set jumpcloud.groupName="My Teleport Users" \
+  --set jumpcloud.clientID="your-client-id" \
+  --set jumpcloud.clientSecret="your-client-secret" \
+  --set jumpcloud.orgID="your-org-id" \
   --set image.repository=your-registry/jumpcloud-teleport-sync \
   --set image.tag=latest
 ```
@@ -43,14 +47,13 @@ helm install jumpcloud-teleport-sync jumpcloud-teleport-sync/jumpcloud-teleport-
 
 ```bash
 helm install jumpcloud-teleport-sync jumpcloud-teleport-sync/jumpcloud-teleport-sync -n teleport \
-  --set jumpcloudGroupName="My Teleport Users" \
-  --set jumpcloudClientID="your-client-id" \
-  --set jumpcloudClientSecret="your-client-secret" \
-  --set jumpcloudOrgID="your-org-id" \
+  --set jumpcloud.groupName="My Teleport Users" \
+  --set jumpcloud.clientID="your-client-id" \
+  --set jumpcloud.clientSecret="your-client-secret" \
+  --set jumpcloud.orgID="your-org-id" \
   --set dryRun=true
 
-kubectl create job --from=cronjob/jumpcloud-teleport-sync test-sync -n teleport
-kubectl logs -f job/test-sync -n teleport
+kubectl logs -f deployment/jumpcloud-teleport-sync -c sync -n teleport
 ```
 
 ## Setup Hook (ArgoCD compatible)
@@ -78,16 +81,17 @@ Then run `./setup-teleport-bot.sh` manually with `tctl` access.
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `jumpcloudGroupName` | JumpCloud group to sync | (required) |
-| `jumpcloudClientID` | JumpCloud service account client ID | (required unless existingSecret) |
-| `jumpcloudClientSecret` | JumpCloud service account client secret | (required unless existingSecret) |
-| `jumpcloudOrgID` | JumpCloud organization ID | (required unless existingSecret) |
-| `existingSecret` | Use existing K8s secret | `""` |
+| `jumpcloud.groupName` | JumpCloud group to sync | (required) |
+| `jumpcloud.clientID` | JumpCloud service account client ID | (required unless `jumpcloud.existingSecret`) |
+| `jumpcloud.clientSecret` | JumpCloud service account client secret | (required unless `jumpcloud.existingSecret`) |
+| `jumpcloud.orgID` | JumpCloud organization ID | (required unless `jumpcloud.existingSecret`) |
+| `jumpcloud.existingSecret` | Use existing K8s secret for JumpCloud credentials | `""` |
 | `teleportAddr` | Teleport auth address | `teleport-auth.teleport.svc.cluster.local:3025` |
 | `teleportDefaultRoles` | Roles for synced users | `access` |
-| `schedule` | Cron schedule | `*/15 * * * *` |
+| `schedule` | Internal cron schedule | `*/15 * * * *` |
 | `dryRun` | Log-only mode | `false` |
-| `teleportImage.tag` | Teleport version for tbot | `18` |
+| `teleportImage.tag` | Teleport version for tbot sidecar | `18` |
+| `tbotResources` | Resources for the tbot sidecar | `{requests: {cpu: 25m, memory: 32Mi}, limits: {cpu: 100m, memory: 64Mi}}` |
 | `setup.enabled` | Run automatic bot setup hook | `true` |
 | `setup.teleportAuthSelector` | Label selector for auth pod | `app=teleport` |
 | `setup.teleportAuthContainer` | Container name with tctl | `teleport` |
@@ -100,3 +104,5 @@ Then run `./setup-teleport-bot.sh` manually with `tctl` access.
 - **Locks + deletes** users removed from the JumpCloud group
 - **Skips** users not managed by this tool (no `managed-by: jumpcloud-scim-sync` label)
 - Suspended/deactivated JumpCloud users are skipped
+- The sync container waits for tbot to generate the identity file before starting
+- On SIGTERM/SIGINT the process shuts down gracefully, waiting for any in-flight sync to complete

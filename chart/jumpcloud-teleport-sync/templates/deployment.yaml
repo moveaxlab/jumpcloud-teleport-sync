@@ -1,0 +1,131 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "jumpcloud-teleport-sync.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "jumpcloud-teleport-sync.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "jumpcloud-teleport-sync.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "jumpcloud-teleport-sync.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      serviceAccountName: {{ include "jumpcloud-teleport-sync.serviceAccountName" . }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+      containers:
+        - name: tbot
+          image: "{{ .Values.teleportImage.repository }}:{{ .Values.teleportImage.tag }}"
+          command:
+            - tbot
+            - start
+            - -c
+            - /etc/tbot/tbot.yaml
+          volumeMounts:
+            - name: tbot-config
+              mountPath: /etc/tbot
+            - name: identity
+              mountPath: /var/run/teleport
+          {{- with .Values.tbotResources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+        - name: sync
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: JUMPCLOUD_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "jumpcloud-teleport-sync.secretName" . }}
+                  key: JUMPCLOUD_CLIENT_ID
+            - name: JUMPCLOUD_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "jumpcloud-teleport-sync.secretName" . }}
+                  key: JUMPCLOUD_CLIENT_SECRET
+            - name: JUMPCLOUD_ORG_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "jumpcloud-teleport-sync.secretName" . }}
+                  key: JUMPCLOUD_ORG_ID
+            - name: TELEPORT_SYNC_GROUP
+              value: {{ required "jumpcloud.groupName is required" .Values.jumpcloud.groupName | quote }}
+            - name: TELEPORT_ADDR
+              value: {{ .Values.teleportAddr | quote }}
+            - name: TELEPORT_IDENTITY_FILE
+              value: "/var/run/teleport/identity"
+            - name: TELEPORT_DEFAULT_ROLES
+              value: {{ .Values.teleportDefaultRoles | quote }}
+            - name: DRY_RUN
+              value: {{ .Values.dryRun | quote }}
+            - name: SYNC_SCHEDULE
+              value: {{ .Values.schedule | quote }}
+            {{- if .Values.smtp.enabled }}
+            - name: SMTP_ENABLED
+              value: "true"
+            - name: SMTP_HOST
+              value: {{ .Values.smtp.host | quote }}
+            - name: SMTP_PORT
+              value: {{ .Values.smtp.port | quote }}
+            - name: SMTP_FROM
+              value: {{ .Values.smtp.from | quote }}
+            - name: SMTP_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.smtp.existingSecret | default (printf "%s-smtp" (include "jumpcloud-teleport-sync.fullname" .)) }}
+                  key: SMTP_USERNAME
+            - name: SMTP_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.smtp.existingSecret | default (printf "%s-smtp" (include "jumpcloud-teleport-sync.fullname" .)) }}
+                  key: SMTP_PASSWORD
+            {{- end }}
+          volumeMounts:
+            - name: identity
+              mountPath: /var/run/teleport
+              readOnly: true
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+
+      volumes:
+        - name: tbot-config
+          configMap:
+            name: {{ include "jumpcloud-teleport-sync.fullname" . }}-tbot
+        - name: identity
+          emptyDir: {}
+
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

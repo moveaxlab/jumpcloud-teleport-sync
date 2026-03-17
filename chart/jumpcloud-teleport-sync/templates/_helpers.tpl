@@ -54,8 +54,8 @@ ServiceAccount name
 Secret name
 */}}
 {{- define "jumpcloud-teleport-sync.secretName" -}}
-{{- if .Values.existingSecret }}
-{{- .Values.existingSecret }}
+{{- if .Values.jumpcloud.existingSecret }}
+{{- .Values.jumpcloud.existingSecret }}
 {{- else }}
 {{- include "jumpcloud-teleport-sync.fullname" . }}
 {{- end }}

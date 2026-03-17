@@ -10,13 +10,16 @@ import (
 	"net/http"
 	"net/smtp"
 	"os"
+	"os/signal"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/gravitational/teleport/api/client"
 	"github.com/gravitational/teleport/api/client/proto"
 	"github.com/gravitational/teleport/api/types"
+	"github.com/robfig/cron/v3"
 )
 
 // --- JumpCloud API types ---
@@ -577,12 +580,69 @@ func stringSliceEqual(a, b []string) bool {
 	return true
 }
 
-func main() {
+func waitForIdentity(path string, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	for {
+		if info, err := os.Stat(path); err == nil && info.Size() > 0 {
+			return nil
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("timed out waiting for identity file %s", path)
+		}
+		time.Sleep(2 * time.Second)
+	}
+}
+
+func runSync(logger *slog.Logger) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
 	if err := run(ctx); err != nil {
-		slog.Error("sync failed", "error", err)
+		logger.Error("sync failed", "error", err)
+	}
+}
+
+func main() {
+	logger := slog.Default()
+
+	schedule := os.Getenv("SYNC_SCHEDULE")
+	if schedule == "" {
+		schedule = "*/15 * * * *"
+	}
+
+	identityPath := os.Getenv("TELEPORT_IDENTITY_FILE")
+	if identityPath == "" {
+		identityPath = "/var/run/teleport/identity"
+	}
+
+	logger.Info("waiting for tbot identity file", "path", identityPath)
+	if err := waitForIdentity(identityPath, 5*time.Minute); err != nil {
+		logger.Error("identity file not available", "error", err)
 		os.Exit(1)
 	}
+	logger.Info("identity file ready")
+
+	logger.Info("running initial sync")
+	runSync(logger)
+
+	c := cron.New()
+	_, err := c.AddFunc(schedule, func() {
+		logger.Info("scheduled sync triggered")
+		runSync(logger)
+	})
+	if err != nil {
+		logger.Error("invalid cron schedule", "schedule", schedule, "error", err)
+		os.Exit(1)
+	}
+	c.Start()
+	logger.Info("scheduler started", "schedule", schedule)
+
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGTERM, syscall.SIGINT)
+	sig := <-sigCh
+	logger.Info("received signal, shutting down", "signal", sig)
+
+	ctx := c.Stop()
+	<-ctx.Done()
+	logger.Info("shutdown complete")
 }

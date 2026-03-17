@@ -22,13 +22,6 @@ Designed to run as a Kubernetes CronJob in the same cluster/namespace as Telepor
 
 ## Quick Start
 
-### 1. Build and push the image
-
-```bash
-docker build -t your-registry/jumpcloud-teleport-sync:latest .
-docker push your-registry/jumpcloud-teleport-sync:latest
-```
-
 ### Install the Helm chart
 
 The chart automatically creates the Teleport bot, role, and join token

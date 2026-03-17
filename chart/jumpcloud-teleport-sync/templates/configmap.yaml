@@ -20,3 +20,5 @@ data:
         destination:
           type: directory
           path: /var/run/teleport
+          acls: off
+          symlinks: insecure

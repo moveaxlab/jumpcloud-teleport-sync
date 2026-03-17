@@ -32,7 +32,10 @@ spec:
           imagePullSecrets:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-
+          securityContext:
+            runAsUser: 65532
+            runAsGroup: 65532
+            fsGroup: 65532
           initContainers:
             - name: tbot
               image: "{{ .Values.teleportImage.repository }}:{{ .Values.teleportImage.tag }}"

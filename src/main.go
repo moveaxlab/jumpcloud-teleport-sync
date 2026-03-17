@@ -175,7 +175,7 @@ func (jc *JumpCloudClient) do(ctx context.Context, method, path string, body io.
 	if err != nil {
 		return nil, fmt.Errorf("creating request: %w", err)
 	}
-	req.Header.Set("Authorization", "Bearer "+jc.accessToken)
+	req.Header.Set("x-api-key", jc.accessToken)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("x-org-id", jc.orgID)

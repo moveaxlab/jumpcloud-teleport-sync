@@ -63,7 +63,7 @@ spec:
       - resources: [token]
         verbs: [list, read, create]
       - resources: [lock]
-        verbs: [list, read, create, update]
+        verbs: [list, read, create, update, delete]
       - resources: [reset_password_token]
         verbs: [create]
 EOF

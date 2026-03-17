@@ -413,6 +413,12 @@ func run(ctx context.Context) error {
 					continue
 				}
 
+				if err := tc.DeleteLock(ctx, "jc-sync-"+username); err != nil {
+					logger.Debug("no previous lock to remove", "username", username)
+				} else {
+					logger.Info("removed previous lock for recreated user", "username", username)
+				}
+
 				token, err := tc.CreateResetPasswordToken(ctx,
 					&proto.CreateResetPasswordTokenRequest{
 						Name: username,

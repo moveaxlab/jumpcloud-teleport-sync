@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "jumpcloud-teleport-sync.fullname" . }}-tbot
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "jumpcloud-teleport-sync.labels" . | nindent 4 }}
+data:
+  tbot.yaml: |
+    version: v2
+    auth_server: {{ .Values.teleportAddr }}
+    oneshot: true
+    onboarding:
+      join_method: kubernetes
+      token: {{ include "jumpcloud-teleport-sync.fullname" . }}-bot
+    storage:
+      type: memory
+    outputs:
+      - type: identity_file
+        destination:
+          type: directory
+          path: /var/run/teleport

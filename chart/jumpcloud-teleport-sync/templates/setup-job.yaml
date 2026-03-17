@@ -1,0 +1,37 @@
+{{- if .Values.setup.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "jumpcloud-teleport-sync.fullname" . }}-setup
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "jumpcloud-teleport-sync.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  backoffLimit: 3
+  activeDeadlineSeconds: 120
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        {{- include "jumpcloud-teleport-sync.selectorLabels" . | nindent 8 }}
+        component: setup
+    spec:
+      serviceAccountName: {{ include "jumpcloud-teleport-sync.fullname" . }}-setup
+      restartPolicy: OnFailure
+      containers:
+        - name: setup
+          image: "{{ .Values.setup.kubectlImage.repository }}:{{ .Values.setup.kubectlImage.tag }}"
+          command: ["/bin/sh", "/scripts/setup.sh"]
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+      volumes:
+        - name: scripts
+          configMap:
+            name: {{ include "jumpcloud-teleport-sync.fullname" . }}-setup
+            defaultMode: 0755
+{{- end }}

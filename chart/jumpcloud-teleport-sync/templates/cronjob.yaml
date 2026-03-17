@@ -1,0 +1,108 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "jumpcloud-teleport-sync.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "jumpcloud-teleport-sync.labels" . | nindent 4 }}
+spec:
+  schedule: {{ .Values.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: {{ .Values.job.successfulJobsHistoryLimit }}
+  failedJobsHistoryLimit: {{ .Values.job.failedJobsHistoryLimit }}
+  jobTemplate:
+    spec:
+      backoffLimit: {{ .Values.job.backoffLimit }}
+      activeDeadlineSeconds: {{ .Values.job.activeDeadlineSeconds }}
+      template:
+        metadata:
+          labels:
+            {{- include "jumpcloud-teleport-sync.selectorLabels" . | nindent 12 }}
+            {{- with .Values.podLabels }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with .Values.podAnnotations }}
+          annotations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+        spec:
+          serviceAccountName: {{ include "jumpcloud-teleport-sync.serviceAccountName" . }}
+          restartPolicy: OnFailure
+          {{- with .Values.imagePullSecrets }}
+          imagePullSecrets:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+
+          initContainers:
+            - name: tbot
+              image: "{{ .Values.teleportImage.repository }}:{{ .Values.teleportImage.tag }}"
+              command:
+                - tbot
+                - start
+                - --oneshot
+                - -c
+                - /etc/tbot/tbot.yaml
+              volumeMounts:
+                - name: tbot-config
+                  mountPath: /etc/tbot
+                - name: identity
+                  mountPath: /var/run/teleport
+
+          containers:
+            - name: sync
+              image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+              imagePullPolicy: {{ .Values.image.pullPolicy }}
+              env:
+                - name: JUMPCLOUD_CLIENT_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ include "jumpcloud-teleport-sync.secretName" . }}
+                      key: JUMPCLOUD_CLIENT_ID
+                - name: JUMPCLOUD_CLIENT_SECRET
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ include "jumpcloud-teleport-sync.secretName" . }}
+                      key: JUMPCLOUD_CLIENT_SECRET
+                - name: JUMPCLOUD_ORG_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ include "jumpcloud-teleport-sync.secretName" . }}
+                      key: JUMPCLOUD_ORG_ID
+                - name: TELEPORT_SYNC_GROUP
+                  value: {{ required "jumpcloudGroupName is required" .Values.jumpcloudGroupName | quote }}
+                - name: TELEPORT_ADDR
+                  value: {{ .Values.teleportAddr | quote }}
+                - name: TELEPORT_IDENTITY_FILE
+                  value: "/var/run/teleport/identity"
+                - name: TELEPORT_DEFAULT_ROLES
+                  value: {{ .Values.teleportDefaultRoles | quote }}
+                - name: DRY_RUN
+                  value: {{ .Values.dryRun | quote }}
+              volumeMounts:
+                - name: identity
+                  mountPath: /var/run/teleport
+                  readOnly: true
+              {{- with .Values.resources }}
+              resources:
+                {{- toYaml . | nindent 16 }}
+              {{- end }}
+
+          volumes:
+            - name: tbot-config
+              configMap:
+                name: {{ include "jumpcloud-teleport-sync.fullname" . }}-tbot
+            - name: identity
+              emptyDir: {}
+
+          {{- with .Values.nodeSelector }}
+          nodeSelector:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.tolerations }}
+          tolerations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.affinity }}
+          affinity:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}

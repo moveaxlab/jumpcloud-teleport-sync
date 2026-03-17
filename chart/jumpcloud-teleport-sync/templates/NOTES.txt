@@ -1,0 +1,23 @@
+jumpcloud-teleport-sync deployed!
+
+Syncing group: {{ .Values.jumpcloudGroupName }}
+Schedule:      {{ .Values.schedule }}
+Dry run:       {{ .Values.dryRun }}
+
+{{- if .Values.setup.enabled }}
+AUTOMATIC SETUP:
+  A post-install hook Job is creating the Teleport bot, role, and join token.
+  Check its status:
+
+    kubectl get jobs -n {{ .Release.Namespace }} -l component=setup
+
+  This hook is idempotent and safe for ArgoCD re-syncs.
+{{- else }}
+MANUAL SETUP REQUIRED:
+  Run the setup script to create the Teleport bot and token:
+
+    RELEASE_NAME={{ .Release.Name }} NAMESPACE={{ .Release.Namespace }} ./setup-teleport-bot.sh
+{{- end }}
+
+TEST:
+  kubectl create job --from=cronjob/{{ include "jumpcloud-teleport-sync.fullname" . }} test-sync -n {{ .Release.Namespace }}

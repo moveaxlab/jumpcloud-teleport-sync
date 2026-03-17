@@ -440,7 +440,8 @@ func run(ctx context.Context) error {
 			if !stringSliceEqual(traits["full_name"], desiredFullName) {
 				needsUpdate = true
 			}
-			if !stringSliceEqual(existing.GetRoles(), cfg.TeleportRoles) {
+			mergedRoles := mergeRoles(existing.GetRoles(), cfg.TeleportRoles)
+			if !stringSliceEqual(existing.GetRoles(), mergedRoles) {
 				needsUpdate = true
 			}
 
@@ -451,7 +452,7 @@ func run(ctx context.Context) error {
 					traits["email"] = desiredEmail
 					traits["full_name"] = desiredFullName
 					existing.SetTraits(traits)
-					existing.SetRoles(cfg.TeleportRoles)
+					existing.SetRoles(mergedRoles)
 					if _, err := tc.UpdateUser(ctx, existing); err != nil {
 						logger.Error("failed to update user", "username", username, "error", err)
 						continue
@@ -578,6 +579,22 @@ func stringSliceEqual(a, b []string) bool {
 		}
 	}
 	return true
+}
+
+// mergeRoles returns the union of existing and default roles, preserving existing roles.
+func mergeRoles(existing, defaults []string) []string {
+	seen := make(map[string]struct{}, len(existing))
+	merged := make([]string, len(existing))
+	copy(merged, existing)
+	for _, r := range existing {
+		seen[r] = struct{}{}
+	}
+	for _, r := range defaults {
+		if _, ok := seen[r]; !ok {
+			merged = append(merged, r)
+		}
+	}
+	return merged
 }
 
 func waitForIdentity(path string, timeout time.Duration) error {

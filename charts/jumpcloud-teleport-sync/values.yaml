@@ -26,7 +26,7 @@ teleportImage:
 # -- Sync job image
 image:
   repository: ghcr.io/moveaxlab/jumpcloud-teleport-sync
-  tag: latest
+  tag: 0.1.0
   pullPolicy: IfNotPresent
 
 # -- Sync schedule (cron expression, used by the internal scheduler)

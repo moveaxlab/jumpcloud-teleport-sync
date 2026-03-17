@@ -37,9 +37,7 @@ helm install jumpcloud-teleport-sync jumpcloud-teleport-sync/jumpcloud-teleport-
   --set jumpcloud.groupName="My Teleport Users" \
   --set jumpcloud.clientID="your-client-id" \
   --set jumpcloud.clientSecret="your-client-secret" \
-  --set jumpcloud.orgID="your-org-id" \
-  --set image.repository=your-registry/jumpcloud-teleport-sync \
-  --set image.tag=latest
+  --set jumpcloud.orgID="your-org-id"
 ```
 
 ### Test with dry run

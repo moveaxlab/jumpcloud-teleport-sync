@@ -51,7 +51,7 @@ spec:
             {{- toYaml . | nindent 12 }}
           {{- end }}
         - name: sync
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
             - name: JUMPCLOUD_CLIENT_ID

@@ -1,3 +1,11 @@
+# -- Sync job image
+image:
+  repository: ghcr.io/moveaxlab/jumpcloud-teleport-sync
+  pullPolicy: IfNotPresent
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: ""
+
+
 # -- JumpCloud settings
 jumpcloud:
   # -- JumpCloud group name to sync from
@@ -22,12 +30,6 @@ teleportDefaultRoles: "access"
 teleportImage:
   repository: public.ecr.aws/gravitational/teleport-distroless
   tag: "18"
-
-# -- Sync job image
-image:
-  repository: ghcr.io/moveaxlab/jumpcloud-teleport-sync
-  tag: 0.1.0
-  pullPolicy: IfNotPresent
 
 # -- Sync schedule (cron expression, used by the internal scheduler)
 schedule: "*/15 * * * *"

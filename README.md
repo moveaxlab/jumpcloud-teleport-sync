@@ -29,13 +29,15 @@ docker build -t your-registry/jumpcloud-teleport-sync:latest .
 docker push your-registry/jumpcloud-teleport-sync:latest
 ```
 
-### 2. Install the Helm chart
+### Install the Helm chart
 
 The chart automatically creates the Teleport bot, role, and join token
 via a post-install hook. No manual `tctl` step needed.
 
 ```bash
-helm install jc-sync ./chart -n teleport \
+helm repo add jumpcloud-teleport-sync https://moveaxlab.github.io/jumpcloud-teleport-sync/
+
+helm install jumpcloud-teleport-sync jumpcloud-teleport-sync/jumpcloud-teleport-sync -n teleport \
   --set jumpcloudGroupName="My Teleport Users" \
   --set jumpcloudClientID="your-client-id" \
   --set jumpcloudClientSecret="your-client-secret" \
@@ -44,17 +46,17 @@ helm install jc-sync ./chart -n teleport \
   --set image.tag=latest
 ```
 
-### 3. Test with dry run
+### Test with dry run
 
 ```bash
-helm install jc-sync ./chart -n teleport \
+helm install jumpcloud-teleport-sync jumpcloud-teleport-sync/jumpcloud-teleport-sync -n teleport \
   --set jumpcloudGroupName="My Teleport Users" \
   --set jumpcloudClientID="your-client-id" \
   --set jumpcloudClientSecret="your-client-secret" \
   --set jumpcloudOrgID="your-org-id" \
   --set dryRun=true
 
-kubectl create job --from=cronjob/jc-sync-jumpcloud-teleport-sync test-sync -n teleport
+kubectl create job --from=cronjob/jumpcloud-teleport-sync test-sync -n teleport
 kubectl logs -f job/test-sync -n teleport
 ```
 
@@ -72,7 +74,7 @@ use `before-hook-creation` delete policy, so stale Jobs are cleaned up.
 To disable the hook and manage setup manually:
 
 ```bash
-helm install jc-sync ./chart -n teleport \
+helm install jumpcloud-teleport-sync jumpcloud-teleport-sync/jumpcloud-teleport-sync -n teleport \
   --set setup.enabled=false \
   ...
 ```

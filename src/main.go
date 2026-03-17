@@ -130,12 +130,13 @@ func (jc *JumpCloudClient) authenticate(ctx context.Context) error {
 		return nil
 	}
 
-	form := strings.NewReader("grant_type=client_credentials&client_id=" + jc.clientID + "&client_secret=" + jc.clientSecret)
+	form := strings.NewReader("grant_type=client_credentials")
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, jc.authURL, form)
 	if err != nil {
 		return fmt.Errorf("creating auth request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.SetBasicAuth(jc.clientID, jc.clientSecret)
 
 	resp, err := jc.httpClient.Do(req)
 	if err != nil {

@@ -58,6 +58,7 @@ type Config struct {
 	JumpCloudOrgID        string
 	JumpCloudGroupName    string
 	TeleportAddr          string
+	TeleportExternalAddr  string
 	TeleportIdentity      string
 	TeleportRoles         []string
 	DryRun                bool
@@ -91,6 +92,10 @@ func loadConfig() (*Config, error) {
 	if addr == "" {
 		addr = "teleport-auth.teleport.svc.cluster.local:3025"
 	}
+	externalAddr := os.Getenv("TELEPORT_EXTERNAL_ADDR")
+	if externalAddr == "" {
+		externalAddr = addr
+	}
 	identity := os.Getenv("TELEPORT_IDENTITY_FILE")
 	if identity == "" {
 		identity = "/var/run/teleport/identity"
@@ -115,6 +120,7 @@ func loadConfig() (*Config, error) {
 		JumpCloudOrgID:        orgID,
 		JumpCloudGroupName:    groupName,
 		TeleportAddr:          addr,
+		TeleportExternalAddr:  externalAddr,
 		TeleportIdentity:      identity,
 		TeleportRoles:         strings.Split(roles, ","),
 		DryRun:                dryRun,
@@ -512,7 +518,7 @@ func run(ctx context.Context) error {
 						"username", username, "error", err)
 				} else {
 					inviteURL := fmt.Sprintf("https://%s/web/invite/%s",
-						strings.Split(cfg.TeleportAddr, ":")[0], token.GetName())
+						strings.Split(cfg.TeleportExternalAddr, ":")[0], token.GetName())
 					logger.Info("created user with invite",
 						"username", username,
 						"invite_url", inviteURL,

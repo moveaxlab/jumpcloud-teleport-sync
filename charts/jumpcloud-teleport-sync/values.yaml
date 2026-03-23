@@ -23,6 +23,9 @@ jumpcloud:
 # -- Teleport auth server address (in-cluster)
 teleportAddr: "teleport-auth.teleport.svc.cluster.local:3025"
 
+# -- External Teleport address for invite URLs in emails (falls back to teleportAddr if empty)
+teleportExternalAddr: ""
+
 # -- Comma-separated list of Teleport roles to assign to synced users
 teleportDefaultRoles: "access"
 

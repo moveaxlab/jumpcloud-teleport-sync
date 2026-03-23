@@ -84,6 +84,7 @@ Then run `./setup-teleport-bot.sh` manually with `tctl` access.
 | `jumpcloud.orgID` | JumpCloud organization ID | (required unless `jumpcloud.existingSecret`) |
 | `jumpcloud.existingSecret` | Use existing K8s secret for JumpCloud credentials | `""` |
 | `teleportAddr` | Teleport auth address | `teleport-auth.teleport.svc.cluster.local:3025` |
+| `teleportExternalAddr` | External Teleport address for invite URLs in emails | `""` |
 | `teleportDefaultRoles` | Roles for synced users | `access` |
 | `schedule` | Internal cron schedule | `*/15 * * * *` |
 | `dryRun` | Log-only mode | `false` |

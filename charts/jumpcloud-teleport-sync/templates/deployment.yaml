@@ -73,6 +73,10 @@ spec:
               value: {{ required "jumpcloud.groupName is required" .Values.jumpcloud.groupName | quote }}
             - name: TELEPORT_ADDR
               value: {{ .Values.teleportAddr | quote }}
+            {{- if .Values.teleportExternalAddr }}
+            - name: TELEPORT_EXTERNAL_ADDR
+              value: {{ .Values.teleportExternalAddr | quote }}
+            {{- end }}
             - name: TELEPORT_IDENTITY_FILE
               value: "/var/run/teleport/identity"
             - name: TELEPORT_DEFAULT_ROLES

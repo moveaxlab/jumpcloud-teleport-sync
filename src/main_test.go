@@ -514,3 +514,191 @@ func TestGetUserWithRetry_404NonRetryable(t *testing.T) {
 		t.Errorf("expected non-retryable error, got %v", err)
 	}
 }
+
+func TestStringSliceEqual(t *testing.T) {
+	tests := []struct {
+		name     string
+		a        []string
+		b        []string
+		expected bool
+	}{
+		{"both nil", nil, nil, true},
+		{"both empty", []string{}, []string{}, true},
+		{"both equal", []string{"a", "b"}, []string{"a", "b"}, true},
+		{"different order", []string{"a", "b"}, []string{"b", "a"}, false},
+		{"different length", []string{"a"}, []string{"a", "b"}, false},
+		{"different content", []string{"a", "b"}, []string{"a", "c"}, false},
+		{"single element equal", []string{"a"}, []string{"a"}, true},
+		{"single element different", []string{"a"}, []string{"b"}, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := stringSliceEqual(tt.a, tt.b)
+			if result != tt.expected {
+				t.Errorf("stringSliceEqual(%v, %v) = %v, want %v", tt.a, tt.b, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestMergeRoles(t *testing.T) {
+	tests := []struct {
+		name     string
+		existing []string
+		defaults []string
+		expected []string
+	}{
+		{"both empty", []string{}, []string{}, []string{}},
+		{"only existing", []string{"role1", "role2"}, []string{}, []string{"role1", "role2"}},
+		{"only defaults", []string{}, []string{"role1", "role2"}, []string{"role1", "role2"}},
+		{"existing and defaults no overlap", []string{"role1"}, []string{"role2"}, []string{"role1", "role2"}},
+		{"existing and defaults with overlap", []string{"role1", "role2"}, []string{"role2", "role3"}, []string{"role1", "role2", "role3"}},
+		{"all defaults already in existing", []string{"role1", "role2"}, []string{"role1", "role2"}, []string{"role1", "role2"}},
+		{"nil existing", nil, []string{"role1"}, []string{"role1"}},
+		{"nil defaults", []string{"role1"}, nil, []string{"role1"}},
+		{"duplicate in existing", []string{"role1", "role1"}, []string{"role2"}, []string{"role1", "role1", "role2"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := mergeRoles(tt.existing, tt.defaults)
+			if !sliceEqualUnordered(result, tt.expected) {
+				t.Errorf("mergeRoles(%v, %v) = %v, want %v", tt.existing, tt.defaults, result, tt.expected)
+			}
+		})
+	}
+}
+
+func sliceEqualUnordered(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	seen := make(map[string]int)
+	for _, s := range a {
+		seen[s]++
+	}
+	for _, s := range b {
+		seen[s]--
+		if seen[s] < 0 {
+			return false
+		}
+	}
+	return true
+}
+
+func TestFindGroupByName_GruppoTrovato(t *testing.T) {
+	jc := &JumpCloudClient{
+		clientID:     "test",
+		clientSecret: "test",
+		orgID:        "test",
+		httpClient:   &http.Client{Timeout: 30 * time.Second},
+		baseURL:      "http://localhost:9999",
+		authURL:      "http://localhost:9999/token",
+	}
+
+	jc.accessToken = "valid-token"
+	jc.tokenExpiry = time.Now().Add(1 * time.Hour)
+
+	jc.execute = func(ctx context.Context, method, path string, body io.Reader) ([]byte, error) {
+		if path == "/v2/usergroups?filter=name:eq:TestGroup&limit=1" {
+			return []byte(`[{"id":"group123","name":"TestGroup"}]`), nil
+		}
+		return nil, errors.New("unexpected path")
+	}
+
+	ctx := context.Background()
+	groupID, err := jc.FindGroupByName(ctx, "TestGroup")
+
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if groupID != "group123" {
+		t.Errorf("expected group123, got %q", groupID)
+	}
+}
+
+func TestFindGroupByName_GruppoNonTrovato(t *testing.T) {
+	jc := &JumpCloudClient{
+		clientID:     "test",
+		clientSecret: "test",
+		orgID:        "test",
+		httpClient:   &http.Client{Timeout: 30 * time.Second},
+		baseURL:      "http://localhost:9999",
+		authURL:      "http://localhost:9999/token",
+	}
+
+	jc.accessToken = "valid-token"
+	jc.tokenExpiry = time.Now().Add(1 * time.Hour)
+
+	jc.execute = func(ctx context.Context, method, path string, body io.Reader) ([]byte, error) {
+		if path == "/v2/usergroups?filter=name:eq:NonExistent&limit=1" {
+			return []byte(`[]`), nil
+		}
+		return nil, errors.New("unexpected path")
+	}
+
+	ctx := context.Background()
+	_, err := jc.FindGroupByName(ctx, "NonExistent")
+
+	if err == nil {
+		t.Fatal("expected error for not found group")
+	}
+	if !strings.Contains(err.Error(), "not found") {
+		t.Errorf("expected 'not found' in error, got %v", err)
+	}
+}
+
+func TestFindGroupByName_CaseInsensitive(t *testing.T) {
+	jc := &JumpCloudClient{
+		clientID:     "test",
+		clientSecret: "test",
+		orgID:        "test",
+		httpClient:   &http.Client{Timeout: 30 * time.Second},
+		baseURL:      "http://localhost:9999",
+		authURL:      "http://localhost:9999/token",
+	}
+
+	jc.accessToken = "valid-token"
+	jc.tokenExpiry = time.Now().Add(1 * time.Hour)
+
+	jc.execute = func(ctx context.Context, method, path string, body io.Reader) ([]byte, error) {
+		if strings.Contains(path, "filter=name:eq:") {
+			return []byte(`[{"id":"group123","name":"testgroup"}]`), nil
+		}
+		return nil, errors.New("unexpected path")
+	}
+
+	ctx := context.Background()
+	groupID, err := jc.FindGroupByName(ctx, "TESTGROUP")
+
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if groupID != "group123" {
+		t.Errorf("expected group123, got %q", groupID)
+	}
+}
+
+func TestAuthenticate_TokenValido(t *testing.T) {
+	jc := &JumpCloudClient{
+		clientID:     "test",
+		clientSecret: "test",
+		orgID:        "test",
+		httpClient:   &http.Client{Timeout: 30 * time.Second},
+		authURL:      "http://localhost:9999/token",
+	}
+
+	jc.accessToken = "existing-token"
+	jc.tokenExpiry = time.Now().Add(1 * time.Hour)
+
+	ctx := context.Background()
+	err := jc.authenticate(ctx)
+
+	if err != nil {
+		t.Errorf("expected no error when token is valid, got %v", err)
+	}
+	if jc.accessToken != "existing-token" {
+		t.Errorf("expected token to not be refreshed")
+	}
+}

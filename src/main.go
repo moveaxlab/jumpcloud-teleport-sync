@@ -135,6 +135,8 @@ func loadConfig() (*Config, error) {
 
 // --- JumpCloud client ---
 
+type doFunc func(ctx context.Context, method, path string, body io.Reader) ([]byte, error)
+
 type JumpCloudClient struct {
 	clientID     string
 	clientSecret string
@@ -144,6 +146,7 @@ type JumpCloudClient struct {
 	authURL      string
 	accessToken  string
 	tokenExpiry  time.Time
+	execute      doFunc
 }
 
 func NewJumpCloudClient(clientID, clientSecret, orgID string) *JumpCloudClient {
@@ -154,6 +157,7 @@ func NewJumpCloudClient(clientID, clientSecret, orgID string) *JumpCloudClient {
 		httpClient:   &http.Client{Timeout: 30 * time.Second},
 		baseURL:      "https://console.jumpcloud.com/api",
 		authURL:      "https://admin-oauth.id.jumpcloud.com/oauth2/token",
+		execute:      nil,
 	}
 }
 
@@ -197,7 +201,10 @@ func (jc *JumpCloudClient) authenticate(ctx context.Context) error {
 	return nil
 }
 
-func (jc *JumpCloudClient) do(ctx context.Context, method, path string, body io.Reader) ([]byte, error) {
+func (jc *JumpCloudClient) executeRequest(ctx context.Context, method, path string, body io.Reader) ([]byte, error) {
+	if jc.execute != nil {
+		return jc.execute(ctx, method, path, body)
+	}
 	if err := jc.authenticate(ctx); err != nil {
 		return nil, fmt.Errorf("authenticating: %w", err)
 	}
@@ -230,7 +237,7 @@ func (jc *JumpCloudClient) do(ctx context.Context, method, path string, body io.
 
 func (jc *JumpCloudClient) FindGroupByName(ctx context.Context, name string) (string, error) {
 	path := fmt.Sprintf("/v2/usergroups?filter=name:eq:%s&limit=1", name)
-	data, err := jc.do(ctx, http.MethodGet, path, nil)
+	data, err := jc.execute(ctx, http.MethodGet, path, nil)
 	if err != nil {
 		return "", fmt.Errorf("listing user groups: %w", err)
 	}
@@ -252,7 +259,7 @@ func (jc *JumpCloudClient) FindGroupByName(ctx context.Context, name string) (st
 
 func (jc *JumpCloudClient) GetGroupMembers(ctx context.Context, groupID string) ([]string, error) {
 	path := fmt.Sprintf("/v2/usergroups/%s/members", groupID)
-	data, err := jc.do(ctx, http.MethodGet, path, nil)
+	data, err := jc.execute(ctx, http.MethodGet, path, nil)
 	if err != nil {
 		return nil, fmt.Errorf("getting group members: %w", err)
 	}
@@ -278,7 +285,7 @@ func (jc *JumpCloudClient) GetGroupMembers(ctx context.Context, groupID string) 
 
 func (jc *JumpCloudClient) GetUser(ctx context.Context, userID string) (*JCUser, error) {
 	path := fmt.Sprintf("/systemusers/%s", userID)
-	data, err := jc.do(ctx, http.MethodGet, path, nil)
+	data, err := jc.execute(ctx, http.MethodGet, path, nil)
 	if err != nil {
 		return nil, fmt.Errorf("getting user %s: %w", userID, err)
 	}
@@ -288,6 +295,68 @@ func (jc *JumpCloudClient) GetUser(ctx context.Context, userID string) (*JCUser,
 		return nil, fmt.Errorf("parsing user: %w", err)
 	}
 	return &user, nil
+}
+
+func (jc *JumpCloudClient) GetUserWithRetry(ctx context.Context, userID string) (*JCUser, error) {
+	const maxRetries = 3
+	const initialDelay = 500 * time.Millisecond
+
+	var lastErr error
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		user, err := jc.GetUser(ctx, userID)
+		if err == nil {
+			return user, nil
+		}
+
+		lastErr = err
+		if !isRetryableError(err) {
+			return nil, fmt.Errorf("non-retryable error: %w", err)
+		}
+
+		if attempt < maxRetries {
+			delay := initialDelay * time.Duration(attempt)
+			logger := slog.Default()
+			logger.Warn("retrying user fetch",
+				"user_id", userID,
+				"attempt", attempt,
+				"max_retries", maxRetries,
+				"error", err,
+				"retry_after", delay)
+			select {
+			case <-ctx.Done():
+				return nil, fmt.Errorf("context cancelled during retry: %w", ctx.Err())
+			case <-time.After(delay):
+			}
+		}
+	}
+	return nil, fmt.Errorf("failed after %d retries: %w", maxRetries, lastErr)
+}
+
+func isRetryableError(err error) bool {
+	if err == nil {
+		return false
+	}
+	errStr := err.Error()
+	retryableSubstrings := []string{
+		"connection refused",
+		"connection reset",
+		"timeout",
+		"no such host",
+		"i/o timeout",
+		"temporary failure",
+		"server misbehaving",
+		"context deadline exceeded",
+		"context canceled",
+		"temporary error",
+		"service unavailable",
+	}
+	lowerErr := strings.ToLower(errStr)
+	for _, substr := range retryableSubstrings {
+		if strings.Contains(lowerErr, substr) {
+			return true
+		}
+	}
+	return false
 }
 
 // --- Email ---
@@ -378,11 +447,15 @@ func run(ctx context.Context) error {
 	}
 	logger.Info("found group members", "count", len(memberIDs))
 
+	var failedFetchUsers []string
+
 	jcUsers := make(map[string]*JCUser)
 	for _, uid := range memberIDs {
-		user, err := jcClient.GetUser(ctx, uid)
+		user, err := jcClient.GetUserWithRetry(ctx, uid)
 		if err != nil {
-			logger.Warn("failed to fetch user, skipping", "user_id", uid, "error", err)
+			logger.Error("failed to fetch user after retries, will skip deletion for this cycle",
+				"user_id", uid, "error", err)
+			failedFetchUsers = append(failedFetchUsers, uid)
 			continue
 		}
 		if user.Suspended || !user.Activated {
@@ -542,11 +615,18 @@ func run(ctx context.Context) error {
 		if synced[username] {
 			continue
 		}
+		if len(failedFetchUsers) > 0 {
+			logger.Warn("skipping user deletion due to fetch failures in this cycle",
+				"username", username,
+				"failed_count", len(failedFetchUsers))
+			skipped++
+			continue
+		}
 		if cfg.DryRun {
 			logger.Info("[DRY RUN] would delete user (no longer in group)", "username", username)
 		} else {
 			lock, err := types.NewLock("jc-sync-"+username, types.LockSpecV2{
-				Target: types.LockTarget{User: username},
+				Target:  types.LockTarget{User: username},
 				Message: fmt.Sprintf("Removed from JumpCloud group %q", cfg.JumpCloudGroupName),
 			})
 			if err == nil {

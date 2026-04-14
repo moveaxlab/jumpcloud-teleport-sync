@@ -2,8 +2,8 @@ apiVersion: v2
 name: jumpcloud-teleport-sync
 description: Syncs JumpCloud group members to Teleport Community Edition as local users
 type: application
-version: 0.4.0
-appVersion: "0.4.0"
+version: 0.4.1
+appVersion: "0.4.1"
 keywords:
   - teleport
   - jumpcloud

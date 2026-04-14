@@ -2,6 +2,22 @@ apiVersion: v1
 entries:
   jumpcloud-teleport-sync:
   - apiVersion: v2
+    appVersion: 0.4.1
+    created: "2026-04-14T16:27:58.030112099Z"
+    description: Syncs JumpCloud group members to Teleport Community Edition as local
+      users
+    digest: 97f6c01efc860df083af2c724a19231ffaa7af1ebb8c44035b2af01e8330fbbe
+    keywords:
+    - teleport
+    - jumpcloud
+    - scim
+    - sync
+    name: jumpcloud-teleport-sync
+    type: application
+    urls:
+    - https://github.com/moveaxlab/jumpcloud-teleport-sync/releases/download/helm-chart-0.4.1/jumpcloud-teleport-sync-0.4.1.tgz
+    version: 0.4.1
+  - apiVersion: v2
     appVersion: 0.4.0
     created: "2026-03-23T13:13:42.781693818Z"
     description: Syncs JumpCloud group members to Teleport Community Edition as local
@@ -49,4 +65,4 @@ entries:
     urls:
     - https://github.com/moveaxlab/jumpcloud-teleport-sync/releases/download/helm-chart-0.2.1/jumpcloud-teleport-sync-0.2.1.tgz
     version: 0.2.1
-generated: "2026-03-23T13:13:42.781705981Z"
+generated: "2026-04-14T16:27:58.030120965Z"

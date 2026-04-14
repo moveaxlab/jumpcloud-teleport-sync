@@ -157,7 +157,6 @@ func NewJumpCloudClient(clientID, clientSecret, orgID string) *JumpCloudClient {
 		httpClient:   &http.Client{Timeout: 30 * time.Second},
 		baseURL:      "https://console.jumpcloud.com/api",
 		authURL:      "https://admin-oauth.id.jumpcloud.com/oauth2/token",
-		execute:      nil,
 	}
 }
 
@@ -201,12 +200,9 @@ func (jc *JumpCloudClient) authenticate(ctx context.Context) error {
 	return nil
 }
 
-func (jc *JumpCloudClient) executeRequest(ctx context.Context, method, path string, body io.Reader) ([]byte, error) {
+func (jc *JumpCloudClient) doRequest(ctx context.Context, method, path string, body io.Reader) ([]byte, error) {
 	if jc.execute != nil {
 		return jc.execute(ctx, method, path, body)
-	}
-	if err := jc.authenticate(ctx); err != nil {
-		return nil, fmt.Errorf("authenticating: %w", err)
 	}
 
 	url := jc.baseURL + path
@@ -235,9 +231,16 @@ func (jc *JumpCloudClient) executeRequest(ctx context.Context, method, path stri
 	return data, nil
 }
 
+func (jc *JumpCloudClient) executeRequest(ctx context.Context, method, path string, body io.Reader) ([]byte, error) {
+	if err := jc.authenticate(ctx); err != nil {
+		return nil, fmt.Errorf("authenticating: %w", err)
+	}
+	return jc.doRequest(ctx, method, path, body)
+}
+
 func (jc *JumpCloudClient) FindGroupByName(ctx context.Context, name string) (string, error) {
 	path := fmt.Sprintf("/v2/usergroups?filter=name:eq:%s&limit=1", name)
-	data, err := jc.execute(ctx, http.MethodGet, path, nil)
+	data, err := jc.executeRequest(ctx, http.MethodGet, path, nil)
 	if err != nil {
 		return "", fmt.Errorf("listing user groups: %w", err)
 	}
@@ -259,7 +262,7 @@ func (jc *JumpCloudClient) FindGroupByName(ctx context.Context, name string) (st
 
 func (jc *JumpCloudClient) GetGroupMembers(ctx context.Context, groupID string) ([]string, error) {
 	path := fmt.Sprintf("/v2/usergroups/%s/members", groupID)
-	data, err := jc.execute(ctx, http.MethodGet, path, nil)
+	data, err := jc.executeRequest(ctx, http.MethodGet, path, nil)
 	if err != nil {
 		return nil, fmt.Errorf("getting group members: %w", err)
 	}
@@ -285,7 +288,7 @@ func (jc *JumpCloudClient) GetGroupMembers(ctx context.Context, groupID string) 
 
 func (jc *JumpCloudClient) GetUser(ctx context.Context, userID string) (*JCUser, error) {
 	path := fmt.Sprintf("/systemusers/%s", userID)
-	data, err := jc.execute(ctx, http.MethodGet, path, nil)
+	data, err := jc.executeRequest(ctx, http.MethodGet, path, nil)
 	if err != nil {
 		return nil, fmt.Errorf("getting user %s: %w", userID, err)
 	}

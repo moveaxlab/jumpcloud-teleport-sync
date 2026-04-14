@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -700,5 +701,143 @@ func TestAuthenticate_TokenValido(t *testing.T) {
 	}
 	if jc.accessToken != "existing-token" {
 		t.Errorf("expected token to not be refreshed")
+	}
+}
+
+func TestFindGroupByName_WithRealHTTPClient(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/oauth2/token" && r.Method == http.MethodPost {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"access_token":"test-token","expires_in":3600}`))
+			return
+		}
+		if r.URL.Path == "/api/v2/usergroups" && r.Method == http.MethodGet {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`[{"id":"group123","name":"TestGroup"}]`))
+			return
+		}
+		http.Error(w, "not found", http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	jc := NewJumpCloudClient("test-id", "test-secret", "test-org")
+	jc.baseURL = server.URL + "/api"
+	jc.authURL = server.URL + "/oauth2/token"
+
+	ctx := context.Background()
+	groupID, err := jc.FindGroupByName(ctx, "TestGroup")
+
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if groupID != "group123" {
+		t.Errorf("expected group123, got %q", groupID)
+	}
+}
+
+func TestGetGroupMembers_WithRealHTTPClient(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/oauth2/token" && r.Method == http.MethodPost {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"access_token":"test-token","expires_in":3600}`))
+			return
+		}
+		if r.URL.Path == "/api/v2/usergroups/group123/members" && r.Method == http.MethodGet {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`[{"to":{"id":"user1","type":"user"}},{"to":{"id":"user2","type":"user"}}]`))
+			return
+		}
+		http.Error(w, "not found", http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	jc := NewJumpCloudClient("test-id", "test-secret", "test-org")
+	jc.baseURL = server.URL + "/api"
+	jc.authURL = server.URL + "/oauth2/token"
+
+	ctx := context.Background()
+	members, err := jc.GetGroupMembers(ctx, "group123")
+
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if len(members) != 2 {
+		t.Errorf("expected 2 members, got %d", len(members))
+	}
+	if members[0] != "user1" || members[1] != "user2" {
+		t.Errorf("expected [user1 user2], got %v", members)
+	}
+}
+
+func TestGetUser_WithRealHTTPClient(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/oauth2/token" && r.Method == http.MethodPost {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"access_token":"test-token","expires_in":3600}`))
+			return
+		}
+		if r.URL.Path == "/api/systemusers/user123" && r.Method == http.MethodGet {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"_id":"user123","username":"testuser","email":"test@example.com","firstname":"Test","lastname":"User","activated":true,"suspended":false}`))
+			return
+		}
+		http.Error(w, "not found", http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	jc := NewJumpCloudClient("test-id", "test-secret", "test-org")
+	jc.baseURL = server.URL + "/api"
+	jc.authURL = server.URL + "/oauth2/token"
+
+	ctx := context.Background()
+	user, err := jc.GetUser(ctx, "user123")
+
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if user.Username != "testuser" {
+		t.Errorf("expected testuser, got %q", user.Username)
+	}
+	if user.Email != "test@example.com" {
+		t.Errorf("expected test@example.com, got %q", user.Email)
+	}
+}
+
+func TestFindGroupByName_GroupNotFound_WithRealHTTPClient(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/oauth2/token" && r.Method == http.MethodPost {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"access_token":"test-token","expires_in":3600}`))
+			return
+		}
+		if r.URL.Path == "/api/v2/usergroups" && r.Method == http.MethodGet {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`[]`))
+			return
+		}
+		http.Error(w, "not found", http.StatusNotFound)
+	}))
+	defer server.Close()
+
+	jc := NewJumpCloudClient("test-id", "test-secret", "test-org")
+	jc.baseURL = server.URL + "/api"
+	jc.authURL = server.URL + "/oauth2/token"
+
+	ctx := context.Background()
+	_, err := jc.FindGroupByName(ctx, "NonExistent")
+
+	if err == nil {
+		t.Fatal("expected error for not found group")
+	}
+	if !strings.Contains(err.Error(), "not found") {
+		t.Errorf("expected 'not found' in error, got %v", err)
 	}
 }
